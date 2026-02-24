@@ -9,13 +9,13 @@ import { join } from "path";
 
 const KEY_FILE = ".envsync.key";
 const ALGORITHM = "aes-256-gcm";
-const KEY_LENGTH = 32; // 256-bit
+const KEY_LENGTH = 32;
 const IV_LENGTH = 16;
 const SALT_LENGTH = 32;
 const AUTH_TAG_LENGTH = 16;
-const MAGIC = Buffer.from("ENVSYNC1"); // 8-byte file magic header
+const MAGIC = Buffer.from("ENVSYNC1"); // 8-byte magic header to identify lock files
 
-// ── Key management ────────────────────────────────────────────────────────────
+// key management
 
 export function keyFilePath(projectRoot: string): string {
   return join(projectRoot, KEY_FILE);
@@ -31,31 +31,30 @@ export function loadKey(projectRoot: string): Buffer {
   const path = keyFilePath(projectRoot);
   if (!existsSync(path)) {
     throw new Error(
-      `No key file found at ${path}.\nRun \`envsync init\` first, or copy the team key to this location.`
+      `no key file found at ${path}.\nrun 'envsync init' first, or copy the team key to this location.`
     );
   }
   const raw = readFileSync(path, "utf8").trim();
   if (!/^[0-9a-f]{64}$/i.test(raw)) {
-    throw new Error(`Key file ${path} is malformed. Expected 64 hex chars.`);
+    throw new Error(`key file ${path} is malformed. expected 64 hex chars.`);
   }
   return Buffer.from(raw, "hex");
 }
 
-// ── Encryption ─────────────────────────────────────────────────────────────────
+// encryption
 //
-// Lock file binary layout:
-//   [8]  magic  "ENVSYNC1"
-//   [32] salt   (for scrypt key derivation from the stored key — adds uniqueness per lock)
-//   [16] iv     (AES-GCM initialisation vector)
-//   [16] authTag (AES-GCM authentication tag)
-//   [...] ciphertext
+// lock file binary layout:
+//   [8]   magic    "ENVSYNC1"
+//   [32]  salt     used with scrypt to derive a per-lock key
+//   [16]  iv       aes-gcm initialisation vector
+//   [16]  authTag  aes-gcm authentication tag
+//   [...]  ciphertext
 
 export function encrypt(plaintext: string, masterKey: Buffer): Buffer {
   const salt = randomBytes(SALT_LENGTH);
   const iv = randomBytes(IV_LENGTH);
 
-  // Derive a unique per-lock key so re-encrypting the same content always
-  // produces a different ciphertext (salt is random).
+  // derive a per-lock key so the same content always produces different ciphertext
   const derivedKey = scryptSync(masterKey, salt, KEY_LENGTH);
 
   const cipher = createCipheriv(ALGORITHM, derivedKey, iv, {
@@ -75,12 +74,12 @@ export function encrypt(plaintext: string, masterKey: Buffer): Buffer {
 export function decrypt(data: Buffer, masterKey: Buffer): string {
   let offset = 0;
 
-  // Validate magic header
+  // check magic header
   const magic = data.subarray(offset, offset + MAGIC.length);
   offset += MAGIC.length;
   if (!magic.equals(MAGIC)) {
     throw new Error(
-      "Lock file is not a valid envsync file or is corrupted (bad magic bytes)."
+      "lock file is not a valid envsync file or is corrupted (bad magic bytes)."
     );
   }
 
@@ -109,12 +108,12 @@ export function decrypt(data: Buffer, masterKey: Buffer): string {
     );
   } catch {
     throw new Error(
-      "Decryption failed — wrong key, or the lock file has been tampered with."
+      "decryption failed - wrong key, or the lock file has been tampered with."
     );
   }
 }
 
-// ── File helpers ───────────────────────────────────────────────────────────────
+// file helpers
 
 export function encryptFile(
   envPath: string,
@@ -122,7 +121,7 @@ export function encryptFile(
   masterKey: Buffer
 ): void {
   if (!existsSync(envPath)) {
-    throw new Error(`Source file not found: ${envPath}`);
+    throw new Error(`source file not found: ${envPath}`);
   }
   const plaintext = readFileSync(envPath, "utf8");
   const locked = encrypt(plaintext, masterKey);
@@ -135,7 +134,7 @@ export function decryptFile(
   masterKey: Buffer
 ): void {
   if (!existsSync(lockPath)) {
-    throw new Error(`Lock file not found: ${lockPath}`);
+    throw new Error(`lock file not found: ${lockPath}`);
   }
   const data = readFileSync(lockPath);
   const plaintext = decrypt(data, masterKey);
@@ -144,7 +143,7 @@ export function decryptFile(
 
 export function decryptToString(lockPath: string, masterKey: Buffer): string {
   if (!existsSync(lockPath)) {
-    throw new Error(`Lock file not found: ${lockPath}`);
+    throw new Error(`lock file not found: ${lockPath}`);
   }
   const data = readFileSync(lockPath);
   return decrypt(data, masterKey);

@@ -6,63 +6,52 @@ import { updateGitignore } from "../gitignore.js";
 import { installHook } from "../hooks.js";
 
 export async function cmdInit(projectRoot: string): Promise<void> {
-  console.log(chalk.bold("\n🔐 Initializing envsync\n"));
+  console.log(chalk.bold("\nenvsync init\n"));
 
-  // ── 1. Key file ─────────────────────────────────────────────────────────────
+  // key file
   const keyPath = keyFilePath(projectRoot);
 
   if (existsSync(keyPath)) {
-    console.log(chalk.yellow("  ⚠  Key file already exists:"), chalk.dim(keyPath));
-    console.log(chalk.dim("     Skipping key generation — delete it first to rotate.\n"));
+    console.log(chalk.yellow("  warn  key file already exists:"), chalk.dim(keyPath));
+    console.log(chalk.dim("        delete it first to rotate.\n"));
   } else {
     generateKey(projectRoot);
-    console.log(chalk.green("  ✔  Generated key:"), chalk.dim(keyPath));
-    console.log(
-      chalk.dim(
-        "     Share this file securely with teammates (1Password, Bitwarden,\n" +
-        "     encrypted email). Never commit it.\n"
-      )
-    );
+    console.log(chalk.green("  ok    key generated:"), chalk.dim(keyPath));
+    console.log(chalk.dim("        share with teammates via a password manager. never commit it.\n"));
   }
 
-  // ── 2. .gitignore ────────────────────────────────────────────────────────────
+  // .gitignore
   const { added, skipped } = updateGitignore(projectRoot);
 
   if (added.length > 0) {
-    console.log(chalk.green("  ✔  Updated .gitignore — added:"));
-    added.forEach((e) => console.log(chalk.dim(`       ${e}`)));
+    console.log(chalk.green("  ok    .gitignore updated - added:"));
+    added.forEach((e) => console.log(chalk.dim(`          ${e}`)));
   } else {
-    console.log(chalk.yellow("  ⚠  .gitignore already up to date."));
+    console.log(chalk.yellow("  warn  .gitignore already up to date."));
   }
   if (skipped.length > 0) {
-    console.log(chalk.dim(`     Skipped (already present): ${skipped.join(", ")}`));
+    console.log(chalk.dim(`        skipped (already present): ${skipped.join(", ")}`));
   }
   console.log();
 
-  // ── 3. Git hook ──────────────────────────────────────────────────────────────
+  // git hook
   try {
     const { status, path: hookPath } = installHook(projectRoot);
-    const icon = status === "skipped" ? "⚠" : "✔";
     const color = status === "skipped" ? chalk.yellow : chalk.green;
-    console.log(color(`  ${icon}  post-merge hook ${status}:`), chalk.dim(hookPath));
-    console.log(
-      chalk.dim(
-        "     Your .env will auto-update after git pull when a .env.locked exists.\n"
-      )
-    );
+    const label = status === "skipped" ? "warn" : "ok";
+    console.log(color(`  ${label}   post-merge hook ${status}:`), chalk.dim(hookPath));
+    console.log(chalk.dim("        .env will auto-update after git pull if .env.locked is present.\n"));
   } catch (err) {
-    console.log(chalk.yellow("  ⚠  Skipped git hook:"), (err as Error).message);
+    console.log(chalk.yellow("  warn  skipped git hook:"), (err as Error).message);
   }
 
-  // ── 4. Next steps ────────────────────────────────────────────────────────────
+  // next steps
   const hasEnv = existsSync(join(projectRoot, ".env"));
-  console.log(chalk.bold("  Next steps:"));
-  if (hasEnv) {
-    console.log(`    ${chalk.cyan("envsync lock")}    — encrypt your .env into .env.locked`);
-  } else {
-    console.log(chalk.dim("    Create a .env file, then run:"));
-    console.log(`    ${chalk.cyan("envsync lock")}    — encrypt your .env into .env.locked`);
+  console.log(chalk.bold("  next steps:"));
+  if (!hasEnv) {
+    console.log(chalk.dim("    create a .env file, then run:"));
   }
-  console.log(`    ${chalk.cyan("envsync status")}  — check sync status`);
-  console.log(`    ${chalk.cyan("envsync diff")}    — see what changed\n`);
+  console.log(`    ${chalk.cyan("envsync lock")}    - encrypt your .env into .env.locked`);
+  console.log(`    ${chalk.cyan("envsync status")}  - check sync status`);
+  console.log(`    ${chalk.cyan("envsync diff")}    - see what changed\n`);
 }

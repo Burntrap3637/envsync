@@ -7,11 +7,11 @@ import { loadKey, decryptToString } from "../crypto.js";
 interface DiffOptions {
   env?: string;
   lockfile?: string;
-  unified?: boolean; // show unified patch format instead of inline
+  unified?: boolean; // use unified patch format instead of inline
 }
 
+// redact the value side of KEY=value lines so secrets don't appear in the terminal
 function redactValue(line: string): string {
-  // Redact the value part of KEY=value lines so secrets don't hit the terminal
   return line.replace(/^([^#=\s][^=]*)=(.+)/, (_, key, val) => {
     const visible = val.length > 4 ? val.slice(0, 2) + "***" : "***";
     return `${key}=${visible}`;
@@ -25,25 +25,26 @@ export async function cmdDiff(
   const envPath = join(projectRoot, opts.env ?? ".env");
   const lockPath = join(projectRoot, opts.lockfile ?? ".env.locked");
 
-  console.log(chalk.bold("\n📋 Diff: .env vs .env.locked\n"));
+  console.log(chalk.bold("\nenvsync diff\n"));
 
   const hasEnv = existsSync(envPath);
   const hasLock = existsSync(lockPath);
 
   if (!hasEnv && !hasLock) {
-    console.log(chalk.yellow("  Neither .env nor .env.locked found."));
-    console.log(chalk.dim("  Run \`envsync init\` to get started.\n"));
+    console.log(chalk.yellow("  warn  neither .env nor .env.locked found."));
+    console.log(chalk.dim("        run 'envsync init' to get started.\n"));
     return;
   }
 
   if (!hasLock) {
-    console.log(chalk.yellow("  .env.locked not found — nothing to compare against."));
-    console.log(chalk.dim("  Run \`envsync lock\` to create the first lock.\n"));
+    console.log(chalk.yellow("  warn  .env.locked not found - nothing to compare against."));
+    console.log(chalk.dim("        run 'envsync lock' to create the first lock.\n"));
     return;
   }
 
   if (!hasEnv) {
-    console.log(chalk.yellow("  .env not found locally — run \`envsync unlock\` to restore it.\n"));
+    console.log(chalk.yellow("  warn  .env not found locally."));
+    console.log(chalk.dim("        run 'envsync unlock' to restore it.\n"));
     return;
   }
 
@@ -51,7 +52,7 @@ export async function cmdDiff(
   try {
     key = loadKey(projectRoot);
   } catch (err) {
-    console.error(chalk.red(`  ✖  ${(err as Error).message}`));
+    console.error(chalk.red(`  error  ${(err as Error).message}`));
     process.exit(1);
   }
 
@@ -59,14 +60,14 @@ export async function cmdDiff(
   try {
     lockedContent = decryptToString(lockPath, key);
   } catch (err) {
-    console.error(chalk.red(`  ✖  ${(err as Error).message}`));
+    console.error(chalk.red(`  error  ${(err as Error).message}`));
     process.exit(1);
   }
 
   const localContent = readFileSync(envPath, "utf8");
 
   if (localContent === lockedContent) {
-    console.log(chalk.green("  ✔  In sync — .env matches .env.locked exactly.\n"));
+    console.log(chalk.green("  ok    in sync - .env matches .env.locked exactly.\n"));
     return;
   }
 
@@ -83,14 +84,14 @@ export async function cmdDiff(
     return;
   }
 
-  // Inline diff with coloured output
+  // inline diff
   const changes = diffLines(lockedContent, localContent);
   let added = 0;
   let removed = 0;
 
   changes.forEach((part) => {
     const lines = part.value.split("\n").filter((l, i, arr) => {
-      // ignore trailing empty line from split
+      // drop the trailing empty string from split
       if (i === arr.length - 1 && l === "") return false;
       return true;
     });
@@ -110,12 +111,6 @@ export async function cmdDiff(
   });
 
   console.log();
-  console.log(
-    chalk.bold("  Summary:"),
-    chalk.green(`+${added} added`),
-    chalk.red(`-${removed} removed`)
-  );
-  console.log(
-    chalk.dim("\n  Run \`envsync lock\` to update .env.locked with local changes.\n")
-  );
+  console.log(chalk.bold("  summary:"), chalk.green(`+${added}`), chalk.red(`-${removed}`));
+  console.log(chalk.dim("\n  run 'envsync lock' to update .env.locked with local changes.\n"));
 }

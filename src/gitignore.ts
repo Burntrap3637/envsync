@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 
 const GITIGNORE_ENTRIES = [
-  "# envsync — local secrets (never commit these)",
+  "# envsync - local secrets (never commit these)",
   ".env",
   ".env.*",
   "!.env.example",
